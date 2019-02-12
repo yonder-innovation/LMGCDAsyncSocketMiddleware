@@ -137,6 +137,14 @@ typedef NS_ENUM (NSUInteger, LMGCDAsyncSocketStatus) {
     return self;
 }
 
+#pragma mark - Accessors
+
+- (GCDAsyncSocket *)activeSocket
+{
+    return _socketIPv4 ?: _socketIPv6;
+}
+
+
 #pragma mark - Connection
 
 + (BOOL)_lookupHost:(NSString*)host port:(uint16_t)port IPv4Address:(NSData* __autoreleasing*)__IPv4Address IPv6Address:(NSData* __autoreleasing*)__IPv6Address error:(NSError* __autoreleasing*)__error
@@ -287,6 +295,20 @@ typedef NS_ENUM (NSUInteger, LMGCDAsyncSocketStatus) {
     [(_socketIPv4 ?: _socketIPv6) startTLS:tlsSettings];
 }
 
+- (BOOL)enableBackgroundingOnSocket
+{
+    DDLogVerbose(@"enableBackgroundingOnSocket");
+    
+    GCDAsyncSocket* socket = self.activeSocket;
+    
+    __block BOOL result = NO;
+    
+    [socket performBlock:^{
+        result = [socket enableBackgroundingOnSocket];
+    }];
+    return result;
+}
+
 #pragma mark - Read
 
 // Must be called on _delegateQueue
@@ -377,6 +399,13 @@ typedef NS_ENUM (NSUInteger, LMGCDAsyncSocketStatus) {
     }];
 }
 
+- (void)readDataWithTimeout:(NSTimeInterval)timeout tag:(NSUInteger)tag
+{
+    DDLogVerbose(@"Read data with timeout: %ld tag: %ld", timeout, (unsigned long)tag);
+    
+    [self.activeSocket readDataWithTimeout:timeout tag:tag];
+}
+
 #pragma mark - Write
 
 - (void)writeData:(NSData*)data tag:(NSUInteger)tag
@@ -384,6 +413,17 @@ typedef NS_ENUM (NSUInteger, LMGCDAsyncSocketStatus) {
     DDLogVerbose(@"Write data length: %ld tag: %ld", (unsigned long)data.length, (unsigned long)tag);
 
     [(_socketIPv4 ?: _socketIPv6) writeData:data withTimeout:LMGCDAsyncSocketMiddlewareNoTimeout tag:tag];
+}
+
+- (void)writeData:(NSData*)data withTimeout:(NSTimeInterval)timeout tag:(NSUInteger)tag disconnectAfterWriting:(BOOL)disconnectAfterWriting
+{
+    DDLogVerbose(@"Write data length: %ld timeout: %ld tag: %ld disconnect after writing: %@", (unsigned long)data.length, timeout, (unsigned long)tag, disconnectAfterWriting ? @"YES" : @"NO");
+    
+    GCDAsyncSocket* socket = self.activeSocket;
+    [socket writeData:data withTimeout:timeout tag:tag];
+    if (disconnectAfterWriting) {
+        [socket disconnectAfterWriting];
+    }
 }
 
 #pragma mark - Disconnection
@@ -403,6 +443,11 @@ typedef NS_ENUM (NSUInteger, LMGCDAsyncSocketStatus) {
     [_socketIPv6 setDelegate:nil delegateQueue:NULL];
     [_socketIPv6 disconnect];
     _socketIPv6 = nil;
+}
+
+- (void)disconnect
+{
+    [self.activeSocket disconnect];
 }
 
 #pragma mark - Helpers
@@ -454,6 +499,10 @@ typedef NS_ENUM (NSUInteger, LMGCDAsyncSocketStatus) {
 
 + (void)disconnectSocket:(GCDAsyncSocket*)socket onQueue:(dispatch_queue_t)queue
 {
+    if (!queue) {
+        return;
+    }
+    
     dispatch_async(queue, ^{
         [socket setDelegate:nil delegateQueue:NULL];
         [socket disconnect];
@@ -528,8 +577,7 @@ typedef NS_ENUM (NSUInteger, LMGCDAsyncSocketStatus) {
 {
     DDLogVerbose(@"Received Data from Socket (length: %ld)", (unsigned long)data.length);
 
-    [_readPrebuffer appendData:data];
-    [self _processRead:data.length completionType:LMGCDAsyncSocketReadOperationCompletionTypeRead];
+    [self.delegate socketMiddleware:self didReadData:data withTag:tag];
 }
 
 - (void)socket:(GCDAsyncSocket*)sock didWriteDataWithTag:(long)tag

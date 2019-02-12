@@ -48,6 +48,7 @@
 // Did Read
 - (void)socketMiddleware:(LMGCDAsyncSocketMiddleware*)sock didReadDataToBuffer:(NSData*)data rangeRead:(NSRange)rangeRead withTag:(long)tag;
 - (void)socketMiddleware:(LMGCDAsyncSocketMiddleware*)sock didReadPartialDataOfLength:(NSUInteger)partialLength totalBytesRead:(NSUInteger)totalBytesRead tag:(long)tag;
+- (void)socketMiddleware:(LMGCDAsyncSocketMiddleware*)sock didReadData:(NSData *)data withTag:(long)tag;
 
 // Did Disconnect
 - (void)socketMiddlewareDidDisconnect:(LMGCDAsyncSocketMiddleware*)sock withError:(NSError*)error;
@@ -62,21 +63,26 @@
 // Connection
 - (BOOL)connectToHost:(NSString*)host onPort:(uint16_t)port error:(NSError**)errPtr;
 - (void)startTLS:(NSDictionary*)tlsSettings;
+- (BOOL)enableBackgroundingOnSocket;
 
 // Read
 - (void)readDataToData:(NSData*)data buffer:(NSMutableData*)buffer tag:(NSUInteger)tag;
 - (void)readDataToLength:(NSUInteger)length buffer:(NSMutableData*)buffer tag:(NSUInteger)tag;
 - (void)readDataUntilCloseWithBuffer:(NSMutableData*)buffer tag:(NSUInteger)tag;
+- (void)readDataWithTimeout:(NSTimeInterval)timeout tag:(NSUInteger)tag;
 
 // Write
 - (void)writeData:(NSData*)data tag:(NSUInteger)tag;
+- (void)writeData:(NSData*)data withTimeout:(NSTimeInterval)timeout tag:(NSUInteger)tag disconnectAfterWriting:(BOOL)disconnectAfterWriting;
 
 // Disconnection
 - (void)clearDelegateAndDisconnect;
+- (void)disconnect;
 
 @property (nonatomic, weak) id<LMGCDAsyncSocketMiddlewareDelegate> delegate;
 @property (nonatomic, strong, readonly) GCDAsyncSocket* socketIPv4;
 @property (nonatomic, strong, readonly) GCDAsyncSocket* socketIPv6;
+@property (nonatomic, strong, readonly) GCDAsyncSocket* activeSocket;
 
 + (NSData*)CRLFData;
 + (NSData*)CRLFCRLFData;
